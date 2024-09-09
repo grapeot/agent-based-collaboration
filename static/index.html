@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Suggestion App</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px 40px; 
+            background-color: #f5f5f5; 
+        }
+        h1 { color: #333; text-align: center; margin-bottom: 30px; }
+        h2 { color: #444; margin-top: 25px; margin-bottom: 15px; }
+        textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 20px; }
+        #aiSuggestion { background-color: #e9f7ef; border: 1px solid #27ae60; }
+        .container { background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Suggestion App</h1>
+        
+        <h2>User Input</h2>
+        <textarea id="userInput" rows="5" placeholder="Enter your text here..."></textarea>
+        
+        <h2>AI Suggestion</h2>
+        <textarea id="aiSuggestion" rows="5" readonly></textarea>
+        
+        <h2>Knowledge Base</h2>
+        <textarea id="knowledgeBase" rows="5" placeholder="Enter knowledge base here..."></textarea>
+        
+        <h2>Prompt</h2>
+        <textarea id="prompt" rows="5"></textarea>
+    </div>
+
+    <script>
+        const userInput = document.getElementById('userInput');
+        const aiSuggestion = document.getElementById('aiSuggestion');
+        const knowledgeBase = document.getElementById('knowledgeBase');
+        const prompt = document.getElementById('prompt');
+
+        // Add undo and redo stacks
+        const undoStack = [];
+        const redoStack = [];
+        const maxUndoRedoSteps = 100;
+
+        function pushToUndoStack(value) {
+            undoStack.push(value);
+            if (undoStack.length > maxUndoRedoSteps) {
+                undoStack.shift();
+            }
+            // Clear redo stack when a new action is performed
+            redoStack.length = 0;
+        }
+
+        userInput.addEventListener('input', () => {
+            pushToUndoStack(userInput.value);
+        });
+
+        userInput.addEventListener('keydown', (e) => {
+            if (e.ctrlKey) {
+                if (e.key === 'z') {
+                    e.preventDefault();
+                    if (undoStack.length > 0) {
+                        redoStack.push(userInput.value);
+                        userInput.value = undoStack.pop();
+                    }
+                } else if (e.key === 'y') {
+                    e.preventDefault();
+                    if (redoStack.length > 0) {
+                        undoStack.push(userInput.value);
+                        userInput.value = redoStack.pop();
+                    }
+                }
+            }
+        });
+
+        userInput.addEventListener('keyup', async (e) => {
+            if (e.key === 'Enter') {
+                // Save current state before making changes
+                pushToUndoStack(userInput.value);
+
+                const lines = userInput.value.split('\n');
+                const cursorPosition = userInput.selectionStart;
+                const currentLineIndex = userInput.value.substr(0, cursorPosition).split('\n').length - 1;
+                const startIndex = Math.max(0, currentLineIndex - 4);
+                const inputText = lines.slice(startIndex, currentLineIndex + 1).join('\n');
+
+                try {
+                    const response = await fetch('/suggest', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            text: inputText,
+                            knowledge_base: knowledgeBase.value,
+                            prompt: prompt.value
+                        }),
+                    });
+
+                    const data = await response.json();
+                    if (data.status === 'OK') {
+                        aiSuggestion.value = data.suggestion || 'No suggestion provided';
+                        
+                        if (data.replacements && data.replacements.length > 0) {
+                            let updatedText = userInput.value;
+                            for (const replacement of data.replacements) {
+                                updatedText = updatedText.replace(replacement.task, replacement.replace_text);
+                            }
+                            userInput.value = updatedText;
+                            // Save state after replacements
+                            pushToUndoStack(userInput.value);
+                        }
+                    } else {
+                        aiSuggestion.value = `Error: ${data.error_message || 'Unknown error'}`;
+                    }
+                } catch (error) {
+                    aiSuggestion.value = `Error: ${error.message}`;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

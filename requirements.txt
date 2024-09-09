@@ -1,0 +1,10 @@
+pyaudio
+assemblyai
+notion-client
+requests
+fastapi
+openai
+uvicorn
+ollama
+jinja2
+windows-curses
